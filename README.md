@@ -1,5 +1,5 @@
 # stacked_capsule_autoencode_pl
-This code refer to the [official google-research repository.](https://github.com/google-research/google-research/tree/master/stacked_capsule_autoencoders).
+This code refers to the [official google-research repository](https://github.com/google-research/google-research/tree/master/stacked_capsule_autoencoders).
 
 This is a pytorch_lightning (pytorch) implemention of the Stacked Capsule Autoencoder (SCAE), which was introduced in the following paper:[A. R. Kosiorek](http://akosiorek.github.io/), [Sara Sabour](https://ca.linkedin.com/in/sara-sabour-63019132), [Y. W. Teh](https://www.stats.ox.ac.uk/~teh/), and [Geoffrey E. Hinton](https://vectorinstitute.ai/team/geoffrey-hinton/), ["Stacked Capsule Autoencoders"](https://arxiv.org/abs/1906.06818).
 
