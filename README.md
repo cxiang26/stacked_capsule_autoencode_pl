@@ -16,19 +16,3 @@ This is a pytorch_lightning (pytorch) implemention of the Stacked Capsule Autoen
   * The training loop is defined in `main.py`.
   * The model is built in `model/SCAE.py`.
   * Using `tensorboard --logdir=./lightning_log` to monitor the procedure of training.
-
-## Citation
-
-If you find this repo or the corresponding paper useful in your research, please consider citing:
-
-    @inproceedings{Kosiorek2019scae,
-      title={Stacked Capsule Autoencoders},
-      author={Kosiorek, Adam Roman and Sabour, Sara and Teh, Yee Whye and Hinton, Geoffrey Everest},
-      booktitle={Advances in Neural Information Processing Systems},
-      url = {https://arxiv.org/abs/1906.06818},
-      pdf = {https://arxiv.org/pdf/1906.06818},
-      year={2019}
-    }
-
-
-
