@@ -30,8 +30,8 @@ class SetTransformer(nn.Module):
         self._init_weights()
 
     def _init_weights(self):
-        normal_init(self.input_layer, std=0.001)
-        normal_init(self.output_layer, std=0.001)
+        normal_init(self.input_layer, std=0.05)
+        normal_init(self.output_layer, std=0.05)
 
     def forward(self, x, presence=None):
         h = self.input_layer(x)
@@ -57,9 +57,9 @@ class SAB(nn.Module):
         self._init_weights()
 
     def _init_weights(self):
-        normal_init(self.fc_o, std=0.001)
-        normal_init(self.mlp1, std=0.001)
-        normal_init(self.mlp2, std=0.001)
+        normal_init(self.fc_o, std=0.05)
+        normal_init(self.mlp1, std=0.05)
+        normal_init(self.mlp2, std=0.05)
 
     def forward(self, x, presence=None):
         y = self._mab(x, x, x, presence)
@@ -88,11 +88,11 @@ class ISAB(nn.Module):
         self._init_weights()
 
     def _init_weights(self):
-        nn.init.normal_(self.inducing_points.data, std=0.001)
-        normal_init(self.fc_q, std=0.001)
-        normal_init(self.fc_k, std=0.001)
-        normal_init(self.fc_v, std=0.001)
-        normal_init(self.fc_o, std=0.001)
+        nn.init.normal_(self.inducing_points.data, std=0.05)
+        normal_init(self.fc_q, std=0.05)
+        normal_init(self.fc_k, std=0.05)
+        normal_init(self.fc_v, std=0.05)
+        normal_init(self.fc_o, std=0.05)
 
     def forward(self, x, presence=None):
         inducing_points = self.inducing_points.repeat(x.size(0), 1, 1)

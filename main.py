@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from pytorch_lightning import seed_everything
 import torchvision.datasets
 import torchvision.transforms
+from torch.backends import cudnn
 
 from model.scae import SCAE as scae
 from model.scae import part_encoder, part_decoder, obj_encoder, obj_decoder
@@ -29,7 +30,8 @@ class SCAE(pl.LightningModule):
         self.obj_decoder = obj_decoder(n_caps=10, n_caps_dims=2, n_votes=16)
         self._scaenet = scae(self.part_encoder, self.part_decoder,
                              self.obj_encoder, self.obj_decoder)
-        self.accuracy = classification_probe(self.hparams.n_classes)
+        self.prior_accuracy = classification_probe(self.hparams.n_classes)
+        self.posterior_accuracy = classification_probe(self.hparams.n_classes)
 
         # self.example_input_array = torch.rand(size=(1, 1, 28, 28))
 
@@ -41,8 +43,8 @@ class SCAE(pl.LightningModule):
         x, y = batch
         res = self(x)
         loss = self.loss(res)
-        xe1, posterior_acc = self.accuracy(res.posterior_mixing_probs.sum(dim=1)/(res.posterior_mixing_probs.size(1)), y)
-        xe2, prior_acc = self.accuracy(res.caps_presence_prob, y)
+        xe1, posterior_acc = self.posterior_accuracy(res.posterior_mixing_probs.sum(dim=1), y)
+        xe2, prior_acc = self.prior_accuracy(res.caps_presence_prob, y)
         result = pl.TrainResult(minimize=(loss[0]+xe1+xe2))
         result.log_dict({'train_tatol_loss':loss[0]+xe1+xe2, 'train_rec_ll': loss[1], 'train_log_prob': loss[2],
                          'train_dynamic_weight_l2': loss[3], 'train_primary_caps_l1': loss[4],
@@ -56,8 +58,8 @@ class SCAE(pl.LightningModule):
         x, y = batch
         res = self(x)
         loss = self.loss(res)
-        xe1, posterior_acc = self.accuracy(res.posterior_mixing_probs.sum(dim=1)/(res.posterior_mixing_probs.size(1)), y)
-        xe2, prior_acc = self.accuracy(res.caps_presence_prob, y)
+        xe1, posterior_acc = self.posterior_accuracy(res.posterior_mixing_probs.sum(dim=1), y)
+        xe2, prior_acc = self.prior_accuracy(res.caps_presence_prob, y)
 
         result = pl.EvalResult(checkpoint_on=(1-posterior_acc))
         result.log_dict({'val_total_loss': loss[0]+xe1+xe2, 'val_rec_ll': loss[1], 'val_log_prob': loss[2],
@@ -86,8 +88,8 @@ class SCAE(pl.LightningModule):
         batch_size, num_caps = res.caps_presence_prob.size()
         within_example_constant = float(num_caps) / self.hparams.n_classes
         between_example_constant = float(batch_size) / self.hparams.n_classes
-        prior_within_sparsity_loss = torch.sum((torch.sum(res.caps_presence_prob, 1) - within_example_constant) ** 2 / batch_size)
-        prior_between_sparsity_loss = -torch.sum((torch.sum(res.caps_presence_prob, 0) - between_example_constant) ** 2 / num_caps)
+        prior_within_sparsity_loss = torch.sum((torch.sum(res.caps_presence_prob, 1) - within_example_constant) ** 2) / batch_size
+        prior_between_sparsity_loss = -torch.sum((torch.sum(res.caps_presence_prob, 0) - between_example_constant) ** 2) / num_caps
 
         total_loss = (- res.rec_ll
                       - self.hparams.caps_l1_weight * res.log_prob
@@ -169,6 +171,8 @@ class SCAE(pl.LightningModule):
 def main(args: Namespace) -> None:
     if args.seed is not None:
         pl.seed_everything(args.seed)
+    cudnn.deterministic = True
+    cudnn.benchmark = False
 
     if args.distributed_backend == 'ddp':
         # When using a single GPU per process and per

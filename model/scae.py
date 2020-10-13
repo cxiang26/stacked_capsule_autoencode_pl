@@ -110,11 +110,11 @@ class part_encoder(nn.Module):
     def _init_weights(self):
         for m in self.cnn_encoder:
             if type(m) == nn.Conv2d:
-                normal_init(m, std=0.001)
-        normal_init(self.part_pose, std=0.001)
-        normal_init(self.part_pred, std=0.001)
-        normal_init(self.part_feat, std=0.001)
-        normal_init(self.attention, std=0.001)
+                normal_init(m, std=0.05)
+        normal_init(self.part_pose, std=0.05)
+        normal_init(self.part_pred, std=0.05)
+        normal_init(self.part_feat, std=0.05)
+        normal_init(self.attention, std=0.05)
 
     def forward(self, x):
         output = self.cnn_encoder(x)
@@ -236,7 +236,7 @@ class obj_decoder(nn.Module):
         self._init_weights()
 
     def _init_weights(self):
-        nn.init.normal_(self._dummy_vote.data, std=0.001)
+        nn.init.normal_(self._dummy_vote.data, std=0.05)
 
     def forward(self, h, x, presence=None):
         batch_size, n_input_points = x.size()[:2]
@@ -290,10 +290,10 @@ class obj_decoder(nn.Module):
         # winning_pres = torch.gather(vote_presence_prob, idx)
         winning_vote = votes[batch_idx, winning_vote_idx.view(-1), point_idx].view(batch_size, n_input_points, -1)
         winning_pres = vote_presence_prob[batch_idx, winning_vote_idx.view(-1), point_idx].view(batch_size, n_input_points)
-        vote_presence = torch.le(mixing_logits[:, -1:], mixing_logits[:, :-1]) ### if foreground is smaller than bg, ignore this pixel.
+        vote_presence = (mixing_logits[:, -1:] < mixing_logits[:, :-1]) ### if foreground is smaller than bg, ignore this pixel.
 
         # the first four votes belong to the square
-        is_from_capsule = winning_vote_idx // 1 #self._n_votes
+        is_from_capsule = winning_vote_idx // n_input_points
 
         posterior_mixing_probs = torch.softmax(posterior_mixing_logits_per_point, 1)
         dummy_vote = self._dummy_vote.repeat(batch_size, 1, 1, 1)

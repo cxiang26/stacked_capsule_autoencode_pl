@@ -28,45 +28,45 @@ class CapsuleLayer(nn.Module):
         self._caps_dropout_rate = caps_dropout_rate
 
         # self._n_caps MLPs, one for every object capsule, which predicts capsule parameters from Set Transformer’s outputs
-        self.batch_mlp_w1 = nn.Parameter(0.01*torch.rand(size=(1, self._n_caps, 256, self._n_hiddens)))
+        self.batch_mlp_w1 = nn.Parameter(0.5*(torch.rand(size=(1, self._n_caps, 256, self._n_hiddens))-0.5))
         self.batch_mlp_b1 = nn.Parameter(torch.zeros(size=(1, self._n_caps, 1, self._n_hiddens)))
-        self.batch_mlp_w2 = nn.Parameter(0.01*torch.rand(size=(1, self._n_caps, self._n_hiddens, self._n_caps_params)))
+        self.batch_mlp_w2 = nn.Parameter(0.5*(torch.rand(size=(1, self._n_caps, self._n_hiddens, self._n_caps_params))-0.5))
         self.batch_mlp_b2 = nn.Parameter(torch.zeros(size=(1, self._n_caps, 1, self._n_caps_params)))
 
-        self.batch_caps_mlp_w = nn.Parameter(0.01*torch.rand(size=(1, self._n_caps, self._n_caps_params+1, self._n_hiddens)))
+        self.batch_caps_mlp_w = nn.Parameter(0.5*(torch.rand(size=(1, self._n_caps, self._n_caps_params+1, self._n_hiddens))-0.5))
         self.batch_caps_mlp_b = nn.Parameter(torch.zeros(size=(1, self._n_caps, 1, self._n_hiddens)))
 
         # cpr_dynamic no bias
-        self.batch_cpr_dynamic_w = nn.Parameter(0.01*torch.rand(size=(1, self._n_caps, self._n_hiddens, self._n_votes * self._n_transform_params)))
+        self.batch_cpr_dynamic_w = nn.Parameter(0.5*(torch.rand(size=(1, self._n_caps, self._n_hiddens, self._n_votes * self._n_transform_params))-0.5))
 
-        self.batch_ccr_w = nn.Parameter(0.01*torch.rand(size=(1, self._n_caps, self._n_hiddens, self._n_transform_params)))
+        self.batch_ccr_w = nn.Parameter(0.5*(torch.rand(size=(1, self._n_caps, self._n_hiddens, self._n_transform_params))-0.5))
         self.batch_ccr_b = nn.Parameter(torch.zeros(size=(1, self._n_caps, 1, self._n_transform_params)))
 
-        self.batch_pres_logit_per_caps_w = nn.Parameter(0.01*torch.rand(size=(1, self._n_caps, self._n_hiddens, 1)))
+        self.batch_pres_logit_per_caps_w = nn.Parameter(0.5*(torch.rand(size=(1, self._n_caps, self._n_hiddens, 1))-0.5))
         self.batch_pres_logit_per_caps_b = nn.Parameter(torch.zeros(size=(1, self._n_caps, 1, 1)))
 
-        self.batch_pres_logit_per_vote_w = nn.Parameter(0.01*torch.rand(size=(1, self._n_caps, self._n_hiddens, self._n_votes)))
+        self.batch_pres_logit_per_vote_w = nn.Parameter(0.5*(torch.rand(size=(1, self._n_caps, self._n_hiddens, self._n_votes))-0.5))
         self.batch_pres_logit_per_vote_b = nn.Parameter(torch.zeros(size=(1, self._n_caps, 1, self._n_votes)))
 
-        self.batch_scale_per_vote_w = nn.Parameter(0.01*torch.rand(size=(1, self._n_caps, self._n_hiddens, self._n_votes)))
+        self.batch_scale_per_vote_w = nn.Parameter(0.5*(torch.rand(size=(1, self._n_caps, self._n_hiddens, self._n_votes))-0.5))
         self.batch_scale_per_vote_b = nn.Parameter(torch.zeros(size=(1, self._n_caps, 1, self._n_votes)))
 
-        self.cpr_static = nn.Parameter(torch.rand(1, self._n_caps, self._n_votes, self._n_transform_params))
+        self.cpr_static = nn.Parameter(torch.rand(1, self._n_caps, self._n_votes, self._n_transform_params)-0.5)
 
         assert n_caps_dims == 2, ('This is the only value implemented now due to the restriction of similarity transform.')
 
     def _init_weights(self):
         for m in self.caps_mlp:
             if type(m) == nn.Linear:
-                normal_init(m, std=0.001)
-        normal_init(self.mlp1, std=0.001)
-        normal_init(self.mlp2, std=0.001)
-        normal_init(self.cpr_dynamic, std=0.001)
-        normal_init(self.ccr, std=0.001)
-        normal_init(self.pres_logit_per_vote, std=0.001)
-        normal_init(self.pres_logit_per_caps, std=0.001)
-        normal_init(self.scale_per_vote, std=0.001)
-        normal_init(self.cpr_dynamic, std=0.001)
+                normal_init(m, std=0.05)
+        normal_init(self.mlp1, std=0.05)
+        normal_init(self.mlp2, std=0.05)
+        normal_init(self.cpr_dynamic, std=0.05)
+        normal_init(self.ccr, std=0.05)
+        normal_init(self.pres_logit_per_vote, std=0.05)
+        normal_init(self.pres_logit_per_caps, std=0.05)
+        normal_init(self.scale_per_vote, std=0.05)
+        normal_init(self.cpr_dynamic, std=0.05)
 
     def forward(self, features, parent_presence=None):
         batch_size = features.size(0)
@@ -76,7 +76,7 @@ class CapsuleLayer(nn.Module):
             raw_caps_params = features.unsqueeze(dim=2)
             raw_caps_params = raw_caps_params @ self.batch_mlp_w1 + self.batch_mlp_b1
             raw_caps_params = torch.relu(raw_caps_params)
-            raw_caps_params = raw_caps_params @ self.batch_mlp_w2 + self.batch_mlp_b2
+            raw_caps_params = torch.relu(raw_caps_params @ self.batch_mlp_w2 + self.batch_mlp_b2)
             caps_params = raw_caps_params
         else:
             caps_params = features
@@ -137,7 +137,7 @@ class CapsuleLayer(nn.Module):
             scale_per_vote = F.softplus(scale_per_vote + .5) + 1e-2
         else:
             scale_per_vote = torch.zeros_like(scale_per_vote) + 1.
-        dynamic_weights_l2 = torch.sum(cpr_dynamic ** 2 / batch_size) / 2.
+        dynamic_weights_l2 = torch.sum(cpr_dynamic ** 2) / batch_size / 2.
         return AttrDict(
         vote=votes,
         scale=scale_per_vote,
