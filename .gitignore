@@ -3,4 +3,8 @@
 data/
 lightning_logs/
 .idea/
+.idea/*.xml
+.idea/*.iml
+
 model/__pycache__/
+model/__pycache__/*.pyc
