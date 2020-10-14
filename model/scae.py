@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from .util import safe_log, geometric_transform, normal_init
 from .transformer import SetTransformer
 from .capsule import CapsuleLayer
+from .distributions import GaussianMixture
 
 import collections
 from monty.collections import AttrDict
@@ -71,13 +72,14 @@ class SCAE(nn.Module):
         # res.template_pres = pres
 
         B = x.size(0)
-        expanded_x = x.unsqueeze(dim=1)
-        res.rec_ll_per_pixel = rec.pdf.log_prob(expanded_x) # (x: B, 1, 1, 28, 28)
-        res.rec_ll_per_pixel = torch.logsumexp(res.rec_ll_per_pixel + rec.template_mixing_log_prob, dim=1)
+        # expanded_x = x.unsqueeze(dim=1)
+        res.rec_ll_per_pixel = rec.pdf.log_prob(x) # (x: B, 1, 1, 28, 28)
+        # res.rec_ll_per_pixel = torch.logsumexp(res.rec_ll_per_pixel + rec.template_mixing_log_prob, dim=1)
         res.rec_ll = res.rec_ll_per_pixel.view(B, -1).sum(-1).mean()
 
         res.primary_caps_l1 = res.primary_presence.view(B, -1).abs().sum(dim=-1).mean()
         res.transformed_templates = rec.transformed_templates
+        res.rec = rec
         return res
 
 class part_encoder(nn.Module):
@@ -189,10 +191,15 @@ class part_decoder(nn.Module):
         scale = 1. # constant variance
         presence = safe_log(presence)
         template_mixing_logits = template_mixing_logits + presence.unsqueeze(dim=-1).unsqueeze(dim=-1)
-        template_mixing_log_prob = template_mixing_logits - torch.logsumexp(template_mixing_logits, 1, keepdim=True)
-        pdf = torch.distributions.Normal(transformed_templates, scale)
+        # template_mixing_log_prob = template_mixing_logits - torch.logsumexp(template_mixing_logits, 1, keepdim=True)
+        # pdf = torch.distributions.Normal(transformed_templates, scale)
+        pdf = GaussianMixture.make_from_stats(
+            loc=transformed_templates,
+            scale=scale,
+            mixing_logits=template_mixing_logits
+        )
         return AttrDict(transformed_templates=transformed_templates[:, :-1],
-                        template_mixing_log_prob=template_mixing_log_prob,
+                        template_mixing_logits=template_mixing_logits,
                         scale=scale,
                         pdf=pdf)
 
