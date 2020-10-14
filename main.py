@@ -15,7 +15,9 @@ from model.scae import part_encoder, part_decoder, obj_encoder, obj_decoder
 from model.eval import classification_probe
 
 class SCAE(pl.LightningModule):
-    def __init__(self, n_classes,
+    def __init__(self, n_classes: int=10,
+                 n_obj_caps: int=10,
+                 n_part_caps: int=40,
                  learning_rate: float=0.2,
                  batch_size: int=128,
                  num_workers: int=0,
@@ -24,14 +26,15 @@ class SCAE(pl.LightningModule):
         super(SCAE, self).__init__()
         self.save_hyperparameters()
 
-        self.part_encoder = part_encoder(num_capsules=16)
-        self.part_decoder = part_decoder(num_capsules=16)
-        self.obj_encoder = obj_encoder()
-        self.obj_decoder = obj_decoder(n_caps=10, n_caps_dims=2, n_votes=16)
+        self.part_encoder = part_encoder(num_capsules=self.hparams.n_part_caps)
+        self.part_decoder = part_decoder(num_capsules=self.hparams.n_part_caps, target_size=28)
+        self.obj_encoder = obj_encoder(n_outputs=self.hparams.n_obj_caps)
+        self.obj_decoder = obj_decoder(n_caps=self.hparams.n_obj_caps, n_caps_dims=2, n_votes=self.hparams.n_part_caps)
         self._scaenet = scae(self.part_encoder, self.part_decoder,
                              self.obj_encoder, self.obj_decoder)
-        self.prior_accuracy = classification_probe(self.hparams.n_classes)
-        self.posterior_accuracy = classification_probe(self.hparams.n_classes)
+        self.prior_accuracy = classification_probe(self.hparams.n_obj_caps, self.hparams.n_classes)
+        self.posterior_accuracy = classification_probe(self.hparams.n_obj_caps, self.hparams.n_classes)
+        del self.part_decoder, self.part_encoder, self.obj_decoder, self.obj_encoder
 
         # self.example_input_array = torch.rand(size=(1, 1, 28, 28))
 
@@ -116,27 +119,38 @@ class SCAE(pl.LightningModule):
         return tensor
 
     def configure_optimizers(self):
-        optimizer = optim.RMSprop(self.parameters(), lr=self.hparams.learning_rate, momentum=0.9, eps=(1 / (10 * self.hparams.batch_size) ** 2))
+        optimizer = optim.RMSprop(self.parameters(), lr=self.hparams.learning_rate,
+                                  momentum=0.9, eps=(1 / (10 * self.hparams.batch_size) ** 2))
         return [optimizer]
 
     def train_dataloader(self): # Note that the inputs and templates should scale to [0, 1]
-        trans = torchvision.transforms.Compose(
-            [torchvision.transforms.ToTensor()]) #, torchvision.transforms.Normalize((0.1307,), (0.3081,))
+        # image_size = (28, 28)
+        # model_input_size = (40, 40)
+        # padding = tuple((model_input_size[i] - image_size[i]) // 2
+        #                 for i in range(len(model_input_size)))
+        # translate = tuple(p / o for p, o in zip(padding, model_input_size))
+        trans = torchvision.transforms.Compose([
+            # torchvision.transforms.Pad(padding, fill=0, padding_mode='constant'),
+            # torchvision.transforms.RandomAffine(degrees=0, translate=translate, fillcolor=0),
+            torchvision.transforms.ToTensor()]) #, torchvision.transforms.Normalize((0.1307,), (0.3081,))
         train_set = torchvision.datasets.MNIST(root=self.hparams.data_dir, train=True, transform=trans, download=True)
         train_loader = torch.utils.data.DataLoader(
             dataset=train_set,
             batch_size=self.hparams.batch_size,
-            shuffle=True)
+            shuffle=True,
+            num_workers=self.hparams.num_workers)
         return train_loader
 
     def val_dataloader(self):
-        trans = torchvision.transforms.Compose(
-            [torchvision.transforms.ToTensor()]) # torchvision.transforms.Normalize((0.1307,), (0.3081,))
+        trans = torchvision.transforms.Compose([
+            # torchvision.transforms.Pad((6,6), fill=0, padding_mode='constant'),
+             torchvision.transforms.ToTensor()]) # torchvision.transforms.Normalize((0.1307,), (0.3081,))
         val_set = torchvision.datasets.MNIST(root=self.hparams.data_dir, train=True, transform=trans, download=True)
         val_loader = torch.utils.data.DataLoader(
             dataset=val_set,
             batch_size=self.hparams.batch_size,
-            shuffle=False)
+            shuffle=False,
+            num_workers=self.hparams.num_workers)
         return val_loader
 
     @staticmethod
@@ -148,7 +162,7 @@ class SCAE(pl.LightningModule):
 
         # Data
         parser.add_argument('--data_dir', type=str, default='./data')
-        parser.add_argument('--num_workers', default=0, type=int)
+        parser.add_argument('--num_workers', default=2, type=int)
 
         # optim
         parser.add_argument('--batch_size', type=int, default=128)
@@ -178,8 +192,8 @@ def main(args: Namespace) -> None:
         # When using a single GPU per process and per
         # DistributedDataParallel, we need to divide the batch size
         # ourselves based on the total number of GPUs we have
-        args.batch_size = int(args.batch_size / max(1, args.gpus))
-        args.workers = int(args.workers / max(1, args.gpus))
+        args.batch_size = int(args.batch_size / max(1, len(args.gpus)))
+        args.workers = int(args.workers / max(1, len(args.gpus)))
     model = SCAE(**vars(args))
 
     trainer = pl.Trainer.from_argparse_args(args)
@@ -194,18 +208,23 @@ def run_cli():
     parent_parser = pl.Trainer.add_argparse_args(parent_parser)
     parent_parser.add_argument('--seed', type=int, default=42, help='seed for initializing training.')
     parent_parser.add_argument('--n-classes', default=10, type=int)
+    parent_parser.add_argument('--n-part-caps', default=40, type=int)
+    parent_parser.add_argument('--n-obj-caps', default=32, type=int)
     parser = SCAE.add_model_specific_args(parent_parser)
     parser.set_defaults(
-        gpus=1,
+        gpus=[2],
         # distributed_backend='ddp',
         profiler=True,
         deterministic=True,
         max_epochs=600,
         log_save_interval=50,
+        gradient_clip_val=.5,
         # precision=32,
         evaluate=True,
         # resume_from_checkpoint='./lightning_logs/version_6/epoch=114.ckpt',
         # checkpoint_callback=checkpoint_callback,
+        limit_val_batches=0.2, # run through only 25% of the validation set each epoch
+        log_gpu_memory='all', # log all the GPUs
     )
     args = parser.parse_args()
     main(args)
