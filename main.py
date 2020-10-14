@@ -55,6 +55,18 @@ class SCAE(pl.LightningModule):
                          'train_prior_within_sparsity_loss': loss[7], 'train_prior_between_sparsity_loss': loss[8],
                          'train_posterior_cls_acc': posterior_acc, 'train_prior_cls_acc': prior_acc,
                          'train_posterior_cls_xe': xe1, 'train_prior_cls_xe': xe2})
+        if batch_idx == 0:
+            n = min(self.hparams.batch_size, 8)
+            self.logger.experiment.add_images('transformed_templates', res.transformed_templates[0], self.current_epoch)
+            recons = [x.cpu()[:n], res.rec.pdf.mode().cpu()[:n]]
+            if res.get('bottom_up_rec'):
+                recons.append(res.bottom_up_rec.pdf.mode().cpu()[:n])
+            if res.get('top_down_rec'):
+                recons.append(res.top_down_rec.pdf.mode().cpu()[:n])
+            recon = torch.cat(recons, 0)
+            rg = torchvision.utils.make_grid(recon,
+                                             nrow=n, pad_value=0, padding=1)
+            self.logger.experiment.add_image('train_recons', rg, self.current_epoch)
         return result
 
     def validation_step(self, batch, batch_idx):
@@ -82,7 +94,7 @@ class SCAE(pl.LightningModule):
             recon = torch.cat(recons, 0)
             rg = torchvision.utils.make_grid(recon,
                                              nrow=n, pad_value=0, padding=1)
-            self.logger.experiment.add_image('recons', rg, self.current_epoch)
+            self.logger.experiment.add_image('val_recons', rg, self.current_epoch)
         return result
 
     def loss(self, res):
