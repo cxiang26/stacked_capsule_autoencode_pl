@@ -71,8 +71,18 @@ class SCAE(pl.LightningModule):
                          'val_prior_within_sparsity_loss': loss[7], 'val_prior_between_sparsity_loss': loss[8],
                          'val_posetrior_cls_acc': posterior_acc, 'val_prior_cls_acc': prior_acc,
                          'val_posterior_cls_xe': xe1, 'val_prior_cls_xe': xe2})
-        self.logger.experiment.add_image('original_image', x[0])
-        self.logger.experiment.add_images('transformed_templates', res.transformed_templates[0])
+        if batch_idx == 0:
+            n = min(self.hparams.batch_size, 8)
+            self.logger.experiment.add_images('transformed_templates', res.transformed_templates[0], self.current_epoch)
+            recons = [x.cpu()[:n], res.rec.pdf.mode().cpu()[:n]]
+            if res.get('bottom_up_rec'):
+                recons.append(res.bottom_up_rec.pdf.mode().cpu()[:n])
+            if res.get('top_down_rec'):
+                recons.append(res.top_down_rec.pdf.mode().cpu()[:n])
+            recon = torch.cat(recons, 0)
+            rg = torchvision.utils.make_grid(recon,
+                                             nrow=n, pad_value=0, padding=1)
+            self.logger.experiment.add_image('recons', rg, self.current_epoch)
         return result
 
     def loss(self, res):
@@ -212,7 +222,7 @@ def run_cli():
     parent_parser.add_argument('--n-obj-caps', default=32, type=int)
     parser = SCAE.add_model_specific_args(parent_parser)
     parser.set_defaults(
-        gpus=[2],
+        gpus=[0],
         # distributed_backend='ddp',
         profiler=True,
         deterministic=True,
