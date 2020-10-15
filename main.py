@@ -57,7 +57,6 @@ class SCAE(pl.LightningModule):
                          'train_posterior_cls_xe': xe1, 'train_prior_cls_xe': xe2})
         if batch_idx == 0:
             n = min(self.hparams.batch_size, 8)
-            self.logger.experiment.add_images('transformed_templates', res.transformed_templates[0], self.current_epoch)
             recons = [x.cpu()[:n], res.rec.pdf.mode().cpu()[:n]]
             if res.get('bottom_up_rec'):
                 recons.append(res.bottom_up_rec.pdf.mode().cpu()[:n])
@@ -152,6 +151,8 @@ class SCAE(pl.LightningModule):
         #                 for i in range(len(model_input_size)))
         # translate = tuple(p / o for p, o in zip(padding, model_input_size))
         trans = torchvision.transforms.Compose([
+            torchvision.transforms.RandomRotation(30),
+            torchvision.transforms.Pad(2), torchvision.transforms.RandomCrop(28),
             # torchvision.transforms.Pad(padding, fill=0, padding_mode='constant'),
             # torchvision.transforms.RandomAffine(degrees=0, translate=translate, fillcolor=0),
             torchvision.transforms.ToTensor()]) #, torchvision.transforms.Normalize((0.1307,), (0.3081,))
