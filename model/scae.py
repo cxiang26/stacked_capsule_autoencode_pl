@@ -87,7 +87,7 @@ class part_encoder(nn.Module):
         'PrimaryCapsuleTuple',
         'pose feature presence presence_logit '
         'img_embedding')
-    def __init__(self, num_capsules=24, hidden_layers=[(1, 128, 2), (128, 128, 2), (128, 128, 1), (128, 128, 1)], noise_scale=4.):
+    def __init__(self, num_capsules=24, hidden_layers=[(1, 128, 2), (128, 128, 2), (128, 128, 1), (128, 128, 1)], noise_scale=4., drop=None):
         super(part_encoder, self).__init__()
         self._pose = 6
         self._pred = 1
@@ -95,6 +95,7 @@ class part_encoder(nn.Module):
         self._num_caps = num_capsules
         self._noise_scale = noise_scale
         self._hidden_layers = hidden_layers
+        self.drop = drop
         self.cnn_encoder = nn.Sequential()
         for i, (hl_in, hl_out, str) in enumerate(self._hidden_layers):
             self.cnn_encoder.add_module('cnn_encoder_cov_{}'.format(i), nn.Conv2d(hl_in, hl_out, 3, stride=str))
@@ -104,6 +105,8 @@ class part_encoder(nn.Module):
         self.part_feat = nn.Conv2d(self._hidden_layers[-1][1], self._num_caps * self._feat, 1)
         self.attention = nn.Conv2d(self._hidden_layers[-1][1], self._num_caps * 1, 1)
 
+        if self.drop is not None:
+            self.drop = nn.Dropout(self.drop)
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
         self.softmax = nn.Softmax(dim=-1) # dim=-1
@@ -134,9 +137,12 @@ class part_encoder(nn.Module):
         if self._noise_scale > 0.:
             pres_logit += ((torch.rand_like(pres_logit) - .5) * self._noise_scale)
 
-        pose = self.relu(pose)
+        # pose = self.relu(pose)
         pres = self.sigmoid(pres_logit)
-        feat = self.relu(feat)
+        # feat = self.relu(feat)
+        if self.drop is not None:
+            pres = self.drop(pres)
+
         return self.OutputTuple(pose, feat, pres, pres_logit, output)
 
 class part_decoder(nn.Module):
@@ -190,7 +196,7 @@ class part_decoder(nn.Module):
         # template_mixing_logits = template_mixing_logits.max(dim=1, keepdim=True).values  # allowing occlusion by other templates
         scale = 1. # constant variance
         presence = safe_log(presence)
-        template_mixing_logits = template_mixing_logits + presence.unsqueeze(dim=-1).unsqueeze(dim=-1)
+        template_mixing_logits = safe_log(template_mixing_logits) + presence.unsqueeze(dim=-1).unsqueeze(dim=-1)
         # template_mixing_log_prob = template_mixing_logits - torch.logsumexp(template_mixing_logits, 1, keepdim=True)
         # pdf = torch.distributions.Normal(transformed_templates, scale)
         pdf = GaussianMixture.make_from_stats(

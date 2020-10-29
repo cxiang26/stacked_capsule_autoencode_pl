@@ -20,7 +20,7 @@ class SCAE(pl.LightningModule):
                  n_part_caps: int=40,
                  learning_rate: float=0.2,
                  batch_size: int=128,
-                 num_workers: int=0,
+                 workers: int=0,
                  max_epochs: int=1000,
                  **kwargs):
         super(SCAE, self).__init__()
@@ -36,7 +36,7 @@ class SCAE(pl.LightningModule):
         self.posterior_accuracy = classification_probe(self.hparams.n_obj_caps, self.hparams.n_classes)
         del self.part_decoder, self.part_encoder, self.obj_decoder, self.obj_encoder
 
-        # self.example_input_array = torch.rand(size=(1, 1, 28, 28))
+        self.example_input_array = torch.rand(2, 1, 28, 28)
 
     def forward(self, x):
         res = self._scaenet(x)
@@ -115,7 +115,7 @@ class SCAE(pl.LightningModule):
         prior_within_sparsity_loss = torch.sum((torch.sum(res.caps_presence_prob, 1) - within_example_constant) ** 2) / batch_size
         prior_between_sparsity_loss = -torch.sum((torch.sum(res.caps_presence_prob, 0) - between_example_constant) ** 2) / num_caps
 
-        total_loss = (- res.rec_ll
+        total_loss = (- self.hparams.rec_ll_weight * res.rec_ll
                       - self.hparams.caps_l1_weight * res.log_prob
                       + self.hparams.dynamic_l2_weight * res.dynamic_weights_l2
                       + self.hparams.primary_caps_sparsity_weight * res.primary_caps_l1
@@ -151,29 +151,29 @@ class SCAE(pl.LightningModule):
         #                 for i in range(len(model_input_size)))
         # translate = tuple(p / o for p, o in zip(padding, model_input_size))
         trans = torchvision.transforms.Compose([
-            torchvision.transforms.RandomRotation(30),
+            torchvision.transforms.RandomRotation(15),
             torchvision.transforms.Pad(2), torchvision.transforms.RandomCrop(28),
             # torchvision.transforms.Pad(padding, fill=0, padding_mode='constant'),
             # torchvision.transforms.RandomAffine(degrees=0, translate=translate, fillcolor=0),
-            torchvision.transforms.ToTensor()]) #, torchvision.transforms.Normalize((0.1307,), (0.3081,))
+            torchvision.transforms.ToTensor()])
         train_set = torchvision.datasets.MNIST(root=self.hparams.data_dir, train=True, transform=trans, download=True)
         train_loader = torch.utils.data.DataLoader(
             dataset=train_set,
             batch_size=self.hparams.batch_size,
             shuffle=True,
-            num_workers=self.hparams.num_workers)
+            num_workers=self.hparams.workers)
         return train_loader
 
     def val_dataloader(self):
         trans = torchvision.transforms.Compose([
             # torchvision.transforms.Pad((6,6), fill=0, padding_mode='constant'),
-             torchvision.transforms.ToTensor()]) # torchvision.transforms.Normalize((0.1307,), (0.3081,))
+             torchvision.transforms.ToTensor()])
         val_set = torchvision.datasets.MNIST(root=self.hparams.data_dir, train=True, transform=trans, download=True)
         val_loader = torch.utils.data.DataLoader(
             dataset=val_set,
             batch_size=self.hparams.batch_size,
             shuffle=False,
-            num_workers=self.hparams.num_workers)
+            num_workers=self.hparams.workers)
         return val_loader
 
     @staticmethod
@@ -185,7 +185,7 @@ class SCAE(pl.LightningModule):
 
         # Data
         parser.add_argument('--data_dir', type=str, default='./data')
-        parser.add_argument('--num_workers', default=2, type=int)
+        parser.add_argument('--workers', default=2, type=int)
 
         # optim
         parser.add_argument('--batch_size', type=int, default=128)
@@ -193,6 +193,7 @@ class SCAE(pl.LightningModule):
         parser.add_argument('--weight_decay', type=float, default=1.5e-6)
 
         # loss weights
+        parser.add_argument('--rec-ll-weight', type=float, default=0.2)
         parser.add_argument('--caps-l1-weight', type=float, default=1.)
         parser.add_argument('--dynamic-l2-weight', type=float, default=10.)
         parser.add_argument('--primary-caps-sparsity-weight', type=float, default=0.)
@@ -231,8 +232,8 @@ def run_cli():
     parent_parser = pl.Trainer.add_argparse_args(parent_parser)
     parent_parser.add_argument('--seed', type=int, default=42, help='seed for initializing training.')
     parent_parser.add_argument('--n-classes', default=10, type=int)
-    parent_parser.add_argument('--n-part-caps', default=40, type=int)
-    parent_parser.add_argument('--n-obj-caps', default=32, type=int)
+    parent_parser.add_argument('--n-part-caps', default=24, type=int)
+    parent_parser.add_argument('--n-obj-caps', default=24, type=int)
     parser = SCAE.add_model_specific_args(parent_parser)
     parser.set_defaults(
         gpus=[0],
@@ -241,12 +242,12 @@ def run_cli():
         deterministic=True,
         max_epochs=600,
         log_save_interval=50,
-        gradient_clip_val=.5,
+        # gradient_clip_val=.5,
         # precision=32,
         evaluate=True,
-        # resume_from_checkpoint='./lightning_logs/version_6/epoch=114.ckpt',
+        # resume_from_checkpoint='./lightning_logs/version_16/checkpoints/epoch=87.ckpt',
         # checkpoint_callback=checkpoint_callback,
-        limit_val_batches=0.2, # run through only 25% of the validation set each epoch
+        # limit_val_batches=0.2, # run through only 25% of the validation set each epoch
         log_gpu_memory='all', # log all the GPUs
     )
     args = parser.parse_args()
